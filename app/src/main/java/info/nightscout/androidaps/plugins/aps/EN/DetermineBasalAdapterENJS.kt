@@ -47,6 +47,7 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
     @Inject lateinit var activePlugin: ActivePlugin
     @Inject lateinit var repository: AppRepository
     @Inject lateinit var dateUtil: DateUtil
+    @Inject lateinit var tddCalculator: TddCalculator
 
     private var profile = JSONObject()
     private var mGlucoseStatus = JSONObject()
@@ -58,7 +59,6 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
     private var smbAlwaysAllowed = false
     private var currentTime: Long = 0
     private var saveCgmSource = false
-    private var tddAIMI: TddCalculator? = null
     private var StatTIR: TirCalculator? = null
 
     override var currentTempParam: String? = null
@@ -350,12 +350,11 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
         this.profile.put("BasalAt3PM", profile.getBasal(3600000*15+MidnightTime.calc(now)))
 
         // TDD
-        tddAIMI = TddCalculator(aapsLogger,rh,activePlugin,profileFunction,dateUtil,iobCobCalculator, repository)
-        this.mealData.put("TDDAvg1d", tddAIMI!!.averageTDD(tddAIMI!!.calculate(1))?.totalAmount)
-        this.mealData.put("TDDAvg7d", tddAIMI!!.averageTDD(tddAIMI!!.calculate(7))?.totalAmount)
-        this.mealData.put("TDDLast4h", tddAIMI!!.calculateDaily(-4, 0).totalAmount)
-        this.mealData.put("TDDLast8h", tddAIMI!!.calculateDaily(-8, 0).totalAmount)
-        this.mealData.put("TDDLast8hfor4h", tddAIMI!!.calculateDaily(-8,-4).totalAmount)
+        this.mealData.put("TDDAvg1d", tddCalculator.averageTDD(tddCalculator.calculate(1))?.totalAmount)
+        this.mealData.put("TDDAvg7d", tddCalculator.averageTDD(tddCalculator.calculate(7))?.totalAmount)
+        this.mealData.put("TDDLast4h", tddCalculator.calculateDaily(-4, 0).totalAmount)
+        this.mealData.put("TDDLast8h", tddCalculator.calculateDaily(-8, 0).totalAmount)
+        this.mealData.put("TDDLast8hfor4h", tddCalculator.calculateDaily(-8,-4).totalAmount)
 
         // Override profile ISF with TDD ISF if selected in prefs
         this.profile.put("use_sens_TDD", sp.getBoolean(R.string.key_use_sens_tdd, false))
