@@ -1572,8 +1572,9 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
                 // ============== DELTA & IOB BASED RESTRICTIONS ==============
                 // if the delta is increasing allow larger SMB, COB predictions and COB window are always allowed larger SMB
                 // IOB should be positive to cater for unexpected sudden jumps relating to basal unless COB as above
-                var DeltaPctThreshold = 1.10;
-                if ((DeltaPct > DeltaPctThreshold && iob_data.iob > maxBolus * 0.75) || sens_predType == "COB" || ENWindowOK) {
+                var DeltaPctThreshold = 1;
+                //if ((DeltaPct > DeltaPctThreshold && iob_data.iob > maxBolus * 0.75) || sens_predType == "COB" || ENWindowOK) {
+                if ((DeltaPct > DeltaPctThreshold && iob_data.iob > maxBolus * 0.75) && ENWindowOK) {
                     insulinReqPct = insulinReqPct;
                     ENMaxSMB = ENMaxSMB;
                     if (DeltaPct > DeltaPctThreshold && !ENWindowOK) ENReason += ", DeltaPct &gt; " + round(DeltaPctThreshold*100) + "% EN" + (ENWindowOK ? "W" : "") + "-SMB";
