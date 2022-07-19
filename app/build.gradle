@@ -136,7 +136,7 @@ android {
                         def formattedDate = new Date().format('YYMMdd')
                         // on below line we are creating a new name for our apk.
                         def newName = output.outputFile.name
-                        newName.replace("-release", "")
+                        newName = newName.replace("-release", "")
                         // on below line we are replacing -release with our formatted date and ID.
                         newName = formattedDate + "-" + generateGitBuild()[0..7] + "-en-" + newName
                         // at last we are setting our apk name to it.
