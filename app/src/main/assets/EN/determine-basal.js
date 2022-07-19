@@ -1572,18 +1572,19 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
                 // ============== DELTA & IOB BASED RESTRICTIONS ==============
                 // if the delta is increasing allow larger SMB, COB predictions and COB window are always allowed larger SMB
                 // IOB should be positive to cater for unexpected sudden jumps relating to basal unless COB as above
-                var DeltaPctThreshold = 1.10;
-                if ((DeltaPct > DeltaPctThreshold && iob_data.iob > maxBolus * 0.75) || sens_predType == "COB" || ENWindowOK) {
-                    insulinReqPct = insulinReqPct;
-                    ENMaxSMB = ENMaxSMB;
-                    if (DeltaPct > DeltaPctThreshold && !ENWindowOK) ENReason += ", DeltaPct &gt; " + round(DeltaPctThreshold*100) + "% EN" + (ENWindowOK ? "W" : "") + "-SMB";
-                } else {
-                    // prevent SMB when below target for UAM rises Hypo Rebound Protection :)
-                    insulinReqPct = (bg < threshold && ENWIOBThreshU == 0 ? 0 : insulinReqPct); // disable SMB when below target and no intent to use auto EN window trigger
-                    ENReason += (insulinReqPct == 0 ? ", HypoSafety No SMB" : "");
-                    ENReason += (insulinReqPct != 0  && iob_data.iob < maxBolus * 0.75 ? ", Low IOB Restrict SMB" : "");
-                    ENMaxSMB = Math.min(maxBolus,ENMaxSMB); // use the most restrictive
-                }
+//                var DeltaPctThreshold = 1;
+//                //if ((DeltaPct > DeltaPctThreshold && iob_data.iob > maxBolus * 0.75) || sens_predType == "COB" || ENWindowOK) {
+//                if (DeltaPct > DeltaPctThreshold && ENWindowOK) {
+//                    insulinReqPct = insulinReqPct;
+//                    ENMaxSMB = ENMaxSMB;
+//                    //if (DeltaPct > DeltaPctThreshold && !ENWindowOK) ENReason += ", DeltaPct &gt; " + round(DeltaPctThreshold*100) + "% EN" + (ENWindowOK ? "W" : "") + "-SMB";
+//                } else {
+//                    // prevent SMB when below target for UAM rises Hypo Rebound Protection :)
+//                    insulinReqPct = (bg < threshold && !ENWindowOK ENWIOBThreshU == 0 ? 0 : insulinReqPct); // disable SMB when below target and no intent to use auto EN window trigger
+//                    ENReason += (insulinReqPct == 0 ? ", HypoSafety No SMB" : "");
+//                    ENReason += (insulinReqPct != 0  && iob_data.iob < maxBolus * 0.75 ? ", Low IOB Restrict SMB" : "");
+//                    ENMaxSMB = Math.min(maxBolus,ENMaxSMB); // use the most restrictive
+//                }
                 // ===================================================
 
                 if (ENtimeOK) {
