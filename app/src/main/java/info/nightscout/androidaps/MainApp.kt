@@ -80,7 +80,7 @@ class MainApp : DaggerApplication() {
     @Inject lateinit var uel: UserEntryLogger
     @Inject lateinit var alarmSoundServiceHelper: AlarmSoundServiceHelper
     @Inject lateinit var notificationStore: NotificationStore
-    @Inject lateinit var processLifecycleListener: ProcessLifecycleListener
+    @Inject lateinit var processLifecycleListener: Provider<ProcessLifecycleListener>
     @Inject lateinit var profileSwitchPlugin: ThemeSwitcherPlugin
     @Inject lateinit var localAlertUtils: LocalAlertUtils
     @Inject lateinit var rh: Provider<ResourceHelper>
@@ -94,7 +94,6 @@ class MainApp : DaggerApplication() {
         RxDogTag.install()
         setRxErrorHandler()
         LocaleHelper.update(this)
-        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleListener)
 
         var gitRemote: String? = BuildConfig.REMOTE
         var commitHash: String? = BuildConfig.HEAD
@@ -122,7 +121,7 @@ class MainApp : DaggerApplication() {
             {
                 // check if identification is set
                 if (buildHelper.isDev() && sp.getStringOrNull(R.string.key_email_for_crash_report, null).isNullOrBlank())
-                    //notificationStore.add(Notification(Notification.IDENTIFICATION_NOT_SET, rh.get().gs(R.string.identification_not_set), Notification.INFO))
+                    notificationStore.add(Notification(Notification.IDENTIFICATION_NOT_SET, rh.get().gs(R.string.identification_not_set), Notification.INFO))
                 // log version
                 disposable += repository.runTransaction(VersionChangeTransaction(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, gitRemote, commitHash)).subscribe()
                 // log app start
@@ -151,6 +150,7 @@ class MainApp : DaggerApplication() {
         localAlertUtils.preSnoozeAlarms()
         doMigrations()
         uel.log(UserEntry.Action.START_AAPS, UserEntry.Sources.Aaps)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleListener.get())
 
         //  schedule widget update
         refreshWidget = Runnable {
