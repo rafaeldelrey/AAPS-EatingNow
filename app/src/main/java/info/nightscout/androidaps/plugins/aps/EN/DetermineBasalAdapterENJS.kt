@@ -11,7 +11,6 @@ import info.nightscout.androidaps.database.entities.TherapyEvent
 import info.nightscout.androidaps.extensions.convertedToAbsolute
 import info.nightscout.androidaps.extensions.getPassedDurationToTimeInMinutes
 import info.nightscout.androidaps.extensions.plannedRemainingMinutes
-import info.nightscout.androidaps.extensions.therapyEventFromNsMbg
 import info.nightscout.androidaps.interfaces.*
 import info.nightscout.shared.logging.AAPSLogger
 import info.nightscout.shared.logging.LTag
@@ -26,7 +25,7 @@ import info.nightscout.shared.SafeParse
 import info.nightscout.androidaps.interfaces.ResourceHelper
 import info.nightscout.shared.sharedPreferences.SP
 import info.nightscout.androidaps.utils.stats.TddCalculator
-// import info.nightscout.androidaps.utils.stats.TirCalculator
+import info.nightscout.androidaps.utils.stats.TirCalculator
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -50,7 +49,7 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
     @Inject lateinit var repository: AppRepository
     // @Inject lateinit var dateUtil: DateUtil
     @Inject lateinit var tddCalculator: TddCalculator
-    // @Inject lateinit var tirCalculator: TirCalculator
+    @Inject lateinit var tirCalculator: TirCalculator
 
     private var profile = JSONObject()
     private var mGlucoseStatus = JSONObject()
@@ -269,7 +268,6 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
         this.profile.put("SMBbgOffset", Profile.toMgdl(sp.getDouble(R.string.key_eatingnow_smbbgoffset, 0.0),profileFunction.getUnits()))
         this.profile.put("ISFbgscaler", sp.getDouble(R.string.key_eatingnow_isfbgscaler, 0.0))
         this.profile.put("MaxISFpct", sp.getInt(R.string.key_eatingnow_maxisfpct, 100))
-        this.profile.put("enableSRTDD", sp.getBoolean(R.string.key_use_sr_tdd, false))
         this.profile.put("useDynISF", sp.getBoolean(R.string.key_use_dynamicISF, true))
 
         this.profile.put("insulinType", activePlugin.activeInsulin.friendlyName)
@@ -339,6 +337,8 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
         val activeENTempTargetDuration = repository.getENTemporaryTargetActiveAt(now).blockingGet().lastOrNull()?.duration
         if (activeENTempTargetDuration != null) {
             this.mealData.put("activeENTempTargetDuration",activeENTempTargetDuration/60000)
+        } else {
+            this.mealData.put("activeENTempTargetDuration", 0)
         }
 
         // get the LAST bolus time since EN activation
@@ -351,24 +351,88 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
         this.profile.put("enableBasalAt3PM", sp.getBoolean(R.string.key_use_3pm_basal, false))
         this.profile.put("BasalAt3PM", profile.getBasal(3600000*15+MidnightTime.calc(now)))
 
-        // TDD
-        this.mealData.put("TDDAvg1d", tddCalculator.averageTDD(tddCalculator.calculate(1))?.totalAmount)
-        this.mealData.put("TDDAvg7d", tddCalculator.averageTDD(tddCalculator.calculate(7))?.totalAmount)
-        this.mealData.put("TDDLast4h", tddCalculator.calculateDaily(-4, 0).totalAmount)
-        this.mealData.put("TDDLast8h", tddCalculator.calculateDaily(-8, 0).totalAmount)
-        this.mealData.put("TDDLast8hfor4h", tddCalculator.calculateDaily(-8,-4).totalAmount)
-        this.mealData.put("TDDLastCannula", tddCalculator.calculate(lastCannulaTime,now).totalAmount)
-        // this.mealData.put("TDDPrevCannula", tddCalculator.calculate(prevCannulaTime,lastCannulaTime).totalAmount)
-
-        // Override profile ISF with TDD ISF if selected in prefs
-        this.profile.put("use_sens_TDD", sp.getBoolean(R.string.key_use_sens_tdd, false))
+        // TDD related functions
+        val enableSensTDD = sp.getBoolean(R.string.key_use_sens_tdd, false)
+        this.profile.put("use_sens_TDD", enableSensTDD) // Override profile ISF with TDD ISF if selected in prefs
         this.profile.put("sens_TDD_scale",SafeParse.stringToDouble(sp.getString(R.string.key_sens_tdd_scale,"100")))
+        val enableSRTDD = sp.getBoolean(R.string.key_use_sr_tdd, false)
+        this.profile.put("enableSRTDD", enableSRTDD)
+
+
+        // storing TDD values in prefs, terrible but hopefully effective
+        if (enableSensTDD || enableSRTDD) { // only do TDD if we have to
+
+            // check when TDD last updated
+            val TDDLastUpdate =  sp.getLong("TDDLastUpdate",0)
+            val TDDHrSinceUpdate = (now - TDDLastUpdate) / 3600000
+
+            if (TDDLastUpdate == 0L || TDDHrSinceUpdate > 12) {
+                // Generate the data for the larger datasets every 12 hours
+
+                var TDDAvg7d = tddCalculator.averageTDD(tddCalculator.calculate(7))?.totalAmount
+                this.mealData.put("TDDAvg7d", TDDAvg7d)
+                if (TDDAvg7d == 0.0 || TDDAvg7d == null ) TDDAvg7d = ((basalRate * 12)*100)/21
+                sp.putDouble("TDDAvg7d", TDDAvg7d)
+
+                // val TDDAvg1d = tddCalculator.averageTDD(tddCalculator.calculate(1))?.totalAmount
+                // this.mealData.put("TDDAvg1d", TDDAvg1d)
+                // TDDAvg1d?.let { sp.putDouble("TDDAvg1d", it) }
+
+                // val TDDLast4h = tddCalculator.calculateDaily(-4, 0).totalAmount
+                // this.mealData.put("TDDLast4h", TDDLast4h)
+                // sp.putDouble("TDDLast4h", TDDLast4h)
+
+                // val TDDLast8h = tddCalculator.calculateDaily(-8, 0).totalAmount
+                // this.mealData.put("TDDLast8h", TDDLast8h)
+                // sp.putDouble("TDDLast8h", TDDLast8h)
+
+                // val TDDLast8hfor4h = TDDLast8h - TDDLast4h
+                // this.mealData.put("TDDLast8hfor4h", TDDLast8hfor4h)
+                // // this.mealData.put("TDDLast8hfor4h", tddCalculator.calculateDaily(-8, -4).totalAmount)
+                // sp.putDouble("TDDLast8hfor4h", TDDLast8hfor4h)
+
+                // val TDDLastCannula = tddCalculator.calculate(lastCannulaTime, now).totalAmount
+                // this.mealData.put("TDDLastCannula", TDDLastCannula)
+                // sp.putDouble("TDDLastCannula", TDDLastCannula)
+
+                sp.putLong("TDDLastUpdate", now)
+                this.mealData.put("TDDLastUpdate", sp.getLong("TDDLastUpdate", 0))
+
+            } else {
+                // use stored value where appropriate
+                this.mealData.put("TDDAvg7d", sp.getDouble("TDDAvg7d", ((basalRate * 12)*100)/21))
+            }
+
+            // calculate the rest of the TDD data
+            var TDDAvg1d = tddCalculator.averageTDD(tddCalculator.calculate(1))?.totalAmount
+            if (TDDAvg1d == 0.0 || TDDAvg1d == null) TDDAvg1d = ((basalRate * 12)*100)/21
+            this.mealData.put("TDDAvg1d", TDDAvg1d)
+
+            val TDDLast4h = tddCalculator.calculateDaily(-4, 0).totalAmount
+            this.mealData.put("TDDLast4h", TDDLast4h)
+
+            val TDDLast8h = tddCalculator.calculateDaily(-8, 0).totalAmount
+            this.mealData.put("TDDLast8h", TDDLast8h)
+
+            val TDDLast8hfor4h = TDDLast8h - TDDLast4h
+            this.mealData.put("TDDLast8hfor4h", TDDLast8hfor4h)
+            // this.mealData.put("TDDLast8hfor4h", tddCalculator.calculateDaily(-8, -4).totalAmount)
+
+            val TDDLastCannula = tddCalculator.calculate(lastCannulaTime, now).totalAmount
+            this.mealData.put("TDDLastCannula", TDDLastCannula)
+
+            this.mealData.put("TDDLastUpdate", sp.getLong("TDDLastUpdate", 0))
+        }
 
         // TIR Windows - 4 hours prior to current time // 4.0 - 10.0
-        // this.mealData.put("TIRW4H",tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(4,3,72.0, 180.0)).abovePct())
-        // this.mealData.put("TIRW3H",tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(3,2,72.0, 180.0)).abovePct())
-        // this.mealData.put("TIRW2H",tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(2,1,72.0, 180.0)).abovePct())
-        // this.mealData.put("TIRW1H",tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(1,0,72.0, 180.0)).abovePct())
+        val resistancePerHr = sp.getDouble(R.string.en_resistance_per_hour, 0.0)
+        this.profile.put("resistancePerHr", sp.getDouble(R.string.en_resistance_per_hour, 0.0))
+        if (resistancePerHr > 0) {
+            this.mealData.put("TIRW4H", tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(4, 3, 72.0, 170.0)).abovePct())
+            this.mealData.put("TIRW3H", tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(3, 2, 72.0, 170.0)).abovePct())
+            this.mealData.put("TIRW2H", tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(2, 1, 72.0, 170.0)).abovePct())
+            this.mealData.put("TIRW1H", tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(1, 0, 72.0, 170.0)).abovePct())
+        }
         //
         // this.mealData.put("TIRW4",tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(4,3,72.0, 180.0)).inRangePct())
         // this.mealData.put("TIRW3",tirCalculator.averageTIR(tirCalculator.calculateHoursPrior(3,2,72.0, 180.0)).inRangePct())
