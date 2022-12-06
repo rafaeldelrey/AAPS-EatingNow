@@ -69,7 +69,7 @@ function enable_smb(
     if (!microBolusAllowed) {
         console.error("SMB disabled (!microBolusAllowed)");
         return false;
-    } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && target_bg >= profile.normal_target_bg) {
+    } else if (!profile.allowSMB_with_high_temptarget && profile.temptargetSet && target_bg > profile.normal_target_bg) {
         console.error("SMB disabled due to high temptarget of", target_bg);
         return false;
     } else if (meal_data.bwFound === true && profile.A52_risk_enable === false) {
@@ -187,6 +187,7 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     }
 
     var max_iob = profile.max_iob; // maximum amount of non-bolus IOB OpenAPS will ever deliver
+    var max_iob_en = profile.EN_max_iob; // maximum amount IOB EN will deliver before falling back to AAPS maxBolus
 
     // if min and max are set, then set target to their average
     var target_bg;
@@ -351,6 +352,11 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     enlog += "ENactive: " + ENactive + ", ENtimeOK: " + ENtimeOK + "\n";
     enlog += "ENmaxIOBOK: " + ENmaxIOBOK + ", max_iob: " + max_iob + "\n";
 
+    // Threshold for SMB at night
+    var SMBbgOffset = (profile.SMBbgOffset > 0 ? target_bg + profile.SMBbgOffset : target_bg);
+    var ENSleepMode = !ENactive && !ENtimeOK && bg < SMBbgOffset;
+    enlog += "SMBbgOffset:" + SMBbgOffset + "\n";
+
     // patches ===== END
 
     var tick;
@@ -474,30 +480,7 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     ins_val = (ins_peak < 60 ? (ins_val - ins_peak) + 30 : (ins_val - ins_peak) + 40);
     enlog += "insulinType is " + insulinType + ", ins_val is " + ins_val + ", ins_peak is " + ins_peak + "\n";
 
-    // TDD ********************************
-    // define default vars
-    var SR_TDD = 1, sens_TDD = sens;
-    var TDD = meal_data.TDD;
-
-    // SR_TDD ********************************
-    //var SR_TDD = TDD / meal_data.TDDLastCannula;
-    var SR_TDD = meal_data.TDDLastCannula / meal_data.TDDAvg7d;
-    var sens_LCTDD = 1800 / (meal_data.TDDLastCannula * (Math.log((normalTarget / ins_val) + 1)));
-    sens_LCTDD = sens_LCTDD / (profile.sens_TDD_scale / 100);
-
-    //var SR_TDD = meal_data.TDDLastCannula / meal_data.TDDAvgtoCannula;
-    //var endebug = "AtoC=" + round(meal_data.TDDAvgtoCannula,2) + " LC=" + round(meal_data.TDDLastCannula,2);
-
-    // ISF based on TDD
-    var sens_TDD = 1800 / (TDD * (Math.log((normalTarget / ins_val) + 1)));
-    enlog += "sens_TDD:" + convert_bg(sens_TDD, profile) + "\n";
-    sens_TDD = sens_TDD / (profile.sens_TDD_scale / 100);
-    sens_TDD = (sens_TDD > sens * 3 ? sens : sens_TDD); // fresh install of v3
-    enlog += "sens_TDD scaled by " + profile.sens_TDD_scale + "%:" + convert_bg(sens_TDD, profile) + "\n";
-
-    enlog += "* advanced ISF:\n";
-
-    // TIR_sens - a very simple implementation of autoISF configurable % per hour
+    // ******  TIR_sens - a very simple implementation of autoISF configurable % per hour
     var TIRB0 = 0, TIRB1 = 0, TIRB2 = 0, TIRH_percent = profile.resistancePerHr / 100, TIR_sens = 0, TIR_sens_limited = 0;
 
     // TIRB2 - The TIR for the higher band above 150/8.3
@@ -545,6 +528,33 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     // apply autosens limit to TIR_sens_limited
     TIR_sens_limited = Math.min(TIR_sens, profile.autosens_max);
     TIR_sens_limited = Math.max(TIR_sens_limited, profile.autosens_min);
+    // ******  END TIR_sens - a very simple implementation of autoISF configurable % per hour
+
+    // TDD ********************************
+    // define default vars
+    var SR_TDD = 1, sens_TDD = sens;
+    var TDD = meal_data.TDD;
+
+    // SR_TDD ********************************
+    //var SR_TDD = TDD / meal_data.TDDLastCannula;
+    var SR_TDD = meal_data.TDDLastCannula / meal_data.TDDAvg7d;
+    var endebug = "sr_tdd:" + round(SR_TDD,2);
+    var SR_TDD = meal_data.TDD8h_exp / meal_data.TDDAvg7d;
+
+    var sens_LCTDD = 1800 / (meal_data.TDDLastCannula * (Math.log((normalTarget / ins_val) + 1)));
+    sens_LCTDD = sens_LCTDD / (profile.sens_TDD_scale / 100);
+
+    //var SR_TDD = meal_data.TDDLastCannula / meal_data.TDDAvgtoCannula;
+    //var endebug = "AtoC=" + round(meal_data.TDDAvgtoCannula,2) + " LC=" + round(meal_data.TDDLastCannula,2);
+
+    // ISF based on TDD
+    var sens_TDD = 1800 / (TDD * (Math.log((normalTarget / ins_val) + 1)));
+    enlog += "sens_TDD:" + convert_bg(sens_TDD, profile) + "\n";
+    sens_TDD = sens_TDD / (profile.sens_TDD_scale / 100);
+    sens_TDD = (sens_TDD > sens * 3 ? sens : sens_TDD); // fresh install of v3
+    enlog += "sens_TDD scaled by " + profile.sens_TDD_scale + "%:" + convert_bg(sens_TDD, profile) + "\n";
+
+    enlog += "* advanced ISF:\n";
 
     // ISF at normal target
     var sens_normalTarget = sens, sens_profile = sens; // use profile sens and keep profile sens with any SR
@@ -582,7 +592,9 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     if (profile.use_sens_TDD || profile.use_sens_LCTDD ) {
         // dont adjust sens_normalTarget
         sensitivityRatio = 1;
-    } else if (profile.enableSRTDD && SR_TDD !=1) {
+    } else if (profile.enableSRTDD) {
+        // SR_TDD overnight uses TIR
+        SR_TDD = (ENSleepMode && TIR_sens_limited !=1 ? TIR_sens_limited : SR_TDD);
         // Use SR_TDD when no TT, profile switch
         sensitivityRatio = (profile.temptargetSet && !ENTTActive || profile.percent != 100 ?  1 : SR_TDD);
         // when SR_TDD shows sensitivity but TIR is resistant reset sensitivityRatio to 100%
@@ -604,8 +616,8 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
 
     // apply TIRS to ISF only when delta is slight
     if (TIR_sens_limited !=1) {
-        sens_normalTarget = (delta >= 0 && delta <= 4 || TIR_sens_limited < 1 ? sens_normalTarget / TIR_sens_limited : sens_normalTarget);
-        TIR_sens_limited = (sens_normalTarget != sens_normalTarget ? TIR_sens_limited : 1); // reset to 1 when not being used
+        sens_normalTarget = (delta >= -4 && delta <= 4 || TIR_sens_limited < 1 ? sens_normalTarget / TIR_sens_limited : sens_normalTarget);
+        TIR_sens_limited = profile_sens / sens_normalTarget;
     }
 
     // round SR
@@ -673,11 +685,6 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     // Apply circadian variance to ISF
     sens_normalTarget *= sens_circadian_now;
     enlog += "sens_normalTarget with circadian variance:" + convert_bg(sens_normalTarget, profile) + "\n";
-
-    // Threshold for SMB at night
-    var SMBbgOffset = (profile.SMBbgOffset > 0 ? target_bg + profile.SMBbgOffset : target_bg);
-    var ENSleepMode = !ENactive && !ENtimeOK && bg < SMBbgOffset;
-    enlog += "SMBbgOffset:" + SMBbgOffset + "\n";
 
     // Allow user preferences to adjust the scaling of ISF as BG increases
     // Scaling is converted to a percentage, 0 is normal scaling (1), 5 is 5% stronger (0.95) and -5 is 5% weaker (1.05)
@@ -1554,7 +1561,7 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
                     durationReq = Math.min(120, Math.max(0, durationReq));
                 }
                 //console.error(durationReq);
-                if (durationReq > 0 && !NoZT) {
+                if (durationReq > 0 && AllowZT) {
                     rT.reason += ", setting " + durationReq + "m zero temp. ";
                     return tempBasalFunctions.setTempBasal(rate, durationReq, profile, rT, currenttemp);
                 }
@@ -1733,6 +1740,9 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
 
                 // if bg numbers resumed after sensor errors dont allow a large SMB
                 ENMaxSMB = (minAgo < 1 && delta == 0 && glucose_status.short_avgdelta == 0 ? maxBolus : ENMaxSMB);
+
+                // IOB > EN max IOB fallback to AAPS maxBolus
+                ENMaxSMB = (max_iob_en > 0 && iob_data.iob > max_iob_en ? maxBolus : ENMaxSMB);
 
                 // if loop ran again without a new bg dont allow a large SMB, use maxBolus, allow 90 seconds
                 // ENMaxSMB = (minAgo > 1.5 && !ENTTActive ? maxBolus : ENMaxSMB);
