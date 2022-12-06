@@ -924,6 +924,10 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     var remainingCItotal = 0;
     var remainingCIs = [];
     var predCIs = [];
+
+    var dynISFPredScale =  profile.dynISFPredScale;
+    enlog += "dynISFPredScale: " + dynISFPredScale + "\n";
+
     try {
         iobArray.forEach(function (iobTick) {
             //console.error(iobTick);
@@ -932,12 +936,20 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
             // for IOBpredBGs, predicted deviation impact drops linearly from current deviation down to zero
             // over 60 minutes (data points every 5m)
             var predDev = ci * (1 - Math.min(1, IOBpredBGs.length / (60 / 5)));
-            //IOBpredBG = IOBpredBGs[IOBpredBGs.length-1] + predBGI + predDev;
-            IOBpredBG = IOBpredBGs[IOBpredBGs.length - 1] + (round((-iobTick.activity * (dynISF(Math.max(IOBpredBGs[IOBpredBGs.length - 1], 39),normalTarget,sens_normalTarget,ins_val)) * 5), 2)) + predDev; //dynISF
-            // calculate predBGs with long zero temp without deviations
-            //var ZTpredBG = ZTpredBGs[ZTpredBGs.length-1] + predZTBGI;
-            var ZTpredBG = ZTpredBGs[ZTpredBGs.length-1] + (round(( -iobTick.iobWithZeroTemp.activity * (dynISF(Math.max(ZTpredBGs[ZTpredBGs.length-1],39),normalTarget,sens_normalTarget,ins_val)) * 5 ), 2)); //dynISF
 
+            if (dynISFPredScale) {
+                IOBpredBG = IOBpredBGs[IOBpredBGs.length - 1] + (round((-iobTick.activity * (dynISF(Math.max(IOBpredBGs[IOBpredBGs.length - 1], 39),normalTarget,sens_normalTarget,ins_val)) * 5), 2)) + predDev; //dynISF
+                // calculate predBGs with long zero temp without deviations
+                var ZTpredBG = ZTpredBGs[ZTpredBGs.length-1] + (round(( -iobTick.iobWithZeroTemp.activity * (dynISF(Math.max(ZTpredBGs[ZTpredBGs.length-1],39),normalTarget,sens_normalTarget,ins_val)) * 5 ), 2)); //dynISF
+            }
+            else {
+                IOBpredBG = IOBpredBGs[IOBpredBGs.length-1] + predBGI + predDev;
+                // calculate predBGs with long zero temp without deviations
+                var ZTpredBG = ZTpredBGs[ZTpredBGs.length-1] + predZTBGI;
+            }
+
+
+            //
             // for COBpredBGs, predicted carb impact drops linearly from current carb impact down to zero
             // eventually accounting for all carbs (if they can be absorbed over DIA)
             var predCI = Math.max(0, Math.max(0, ci) * (1 - COBpredBGs.length / Math.max(cid * 2, 1)));
@@ -966,9 +978,13 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
                 //console.error(UAMpredBGs.length,slopeFromDeviations, predUCI);
                 UAMduration = round((UAMpredBGs.length + 1) * 5 / 60, 1);
             }
-            //UAMpredBG = UAMpredBGs[UAMpredBGs.length-1] + predBGI + Math.min(0, predDev) + predUCI;
-            UAMpredBG = UAMpredBGs[UAMpredBGs.length-1] + (round(( -iobTick.activity * (dynISF(Math.max(UAMpredBGs[UAMpredBGs.length-1],39),normalTarget,sens_normalTarget,ins_val)) * 5 ),2)) + Math.min(0, predDev) + predUCI; //dynISF
-
+            if (dynISFPredScale) {
+                UAMpredBG = UAMpredBGs[UAMpredBGs.length-1] + (round(( -iobTick.activity * (dynISF(Math.max(UAMpredBGs[UAMpredBGs.length-1],39),normalTarget,sens_normalTarget,ins_val)) * 5 ),2)) + Math.min(0, predDev) + predUCI; //dynISF
+            }
+            else {
+                UAMpredBG = UAMpredBGs[UAMpredBGs.length-1] + predBGI + Math.min(0, predDev) + predUCI;
+            }
+            //
             //console.error(predBGI, predCI, predUCI);
             // truncate all BG predictions at 4 hours
             if (IOBpredBGs.length < 48) { IOBpredBGs.push(IOBpredBG); }
