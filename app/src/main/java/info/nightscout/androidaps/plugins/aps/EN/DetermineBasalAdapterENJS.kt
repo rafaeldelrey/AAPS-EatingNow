@@ -246,6 +246,7 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
         this.profile.put("EatingNowTimeEnd", sp.getInt(R.string.key_eatingnow_timeend, 17))
         val normalTargetBG = profile.getTargetMgdl().roundToInt()
         this.profile.put("normal_target_bg", normalTargetBG)
+        this.profile.put("EN_max_iob", sp.getDouble(R.string.key_en_max_iob, 0.0))
         this.profile.put("enableGhostCOB", sp.getBoolean(R.string.key_use_ghostcob, false))
         this.profile.put("enableGhostCOBAlways", sp.getBoolean(R.string.key_use_ghostcob_always, false))
 
@@ -394,7 +395,8 @@ class DetermineBasalAdapterENJS internal constructor(private val scriptReader: S
         this.mealData.put("TDDLast8hfor4h", TDDLast8hfor4h)
 
         val TDDLast8_wt = (((1.4 * TDDLast4h) + (0.6 * TDDLast8hfor4h)) * 3)
-        var TDD8h_exp = (3 * TDDLast8h)
+        val TDD8h_exp = (3 * TDDLast8h)
+        this.mealData.put("TDD8h_exp",TDD8h_exp)
 
         if ( TDDLast8_wt < (0.75 * TDDAvg7d)) TDDAvg7d = TDDLast8_wt + ( ( TDDLast8_wt / TDDAvg7d ) * ( TDDAvg7d - TDDLast8_wt ) )
 
