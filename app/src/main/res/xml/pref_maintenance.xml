@@ -9,6 +9,16 @@
         app:initialExpandedChildrenCount="0">
 
         <info.nightscout.androidaps.utils.textValidator.ValidatingEditTextPreference
+            android:defaultValue="30"
+            android.dialogMessage="@string/log_files_to_keep"
+            android:inputType="number"
+            android:key="log_files_to_keep"
+            android:title="@string/log_files_to_keep"
+            validate:maxNumber="999999999"
+            validate:minNumber="1"
+            validate:testType="numericRange"/>
+
+        <info.nightscout.androidaps.utils.textValidator.ValidatingEditTextPreference
             android:defaultValue="logs@androidaps.org"
             android:dialogMessage="@string/maintenance_email"
             android:inputType="textEmailAddress"

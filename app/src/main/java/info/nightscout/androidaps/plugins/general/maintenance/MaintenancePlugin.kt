@@ -72,7 +72,9 @@ class MaintenancePlugin @Inject constructor(
         val autotunefiles = logDir.listFiles { _: File?, name: String ->
             (name.startsWith("autotune") && name.endsWith(".zip"))
         }
-        val amount = sp.getInt(R.string.key_logshipper_amount, keep)
+        // Overwrite keep param with option from UI
+        val logfilesToKeep = sp.getInt(R.string.log_files_to_keep, keep)
+        val amount = sp.getInt(R.string.key_logshipper_amount, logfilesToKeep)
         val keepIndex = amount - 1
         if (autotunefiles != null && autotunefiles.isNotEmpty()) {
             Arrays.sort(autotunefiles) { f1: File, f2: File -> f2.name.compareTo(f1.name) }
